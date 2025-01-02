@@ -50,7 +50,7 @@ public class Device(EccKey? groupKey, EccKey? encryptionKey, EccKey? signingKey,
 
         Device device = new Device
         {
-            GroupKey = EccKey.Loads((byte[])data["group_key"]),
+            GroupKey = data.TryGetValue("group_key", out var value) ? EccKey.Loads((byte[])value) : null,
             EncryptionKey = EccKey.Loads((byte[])data["encryption_key"]),
             SigningKey = EccKey.Loads((byte[])data["signing_key"]),
             GroupCertificate = CertificateChain.Loads((byte[])data["group_certificate"])
@@ -65,13 +65,16 @@ public class Device(EccKey? groupKey, EccKey? encryptionKey, EccKey? signingKey,
     
     public byte[] Dumps()
     {
+        if (GroupKey == null)
+            throw new OutdatedDevice("Cannot dump a v2 device, re-create it or use a Device with a version of 3 or higher");
+        
         return Prd.Build(new Dictionary<string, object>
         {
             { "signature", "PRD"u8.ToArray() },
             { "version", Version },
             { "data", new Dictionary<string, object>
             {
-                { "group_key", GroupKey!.Dumps() },
+                { "group_key", GroupKey.Dumps() },
                 { "encryption_key", EncryptionKey!.Dumps() },
                 { "signing_key", SigningKey!.Dumps() },
                 { "group_certificate_length", GroupCertificate!.Dumps().Length },

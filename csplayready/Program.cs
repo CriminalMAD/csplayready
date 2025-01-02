@@ -54,7 +54,13 @@ class Program
     
     public static void Main(string[] args)
     {
-        using ILoggerFactory factory = LoggerFactory.Create(builder => builder.AddConsole());
+        using ILoggerFactory factory = LoggerFactory.Create(builder =>
+                builder.AddSimpleConsole(options =>
+                {
+                    options.IncludeScopes = false;
+                    options.SingleLine = true;
+                    options.TimestampFormat = "HH:mm:ss ";
+                }));
         ILogger logger = factory.CreateLogger("csplayready");
         
         // license
@@ -198,7 +204,6 @@ class Program
             var signingKeyArg = context.ParseResult.GetValueForOption(signingKeyOption2);
             var signingKey = signingKeyArg == null ? EccKey.Generate() : EccKey.Load(signingKeyArg.FullName);
             
-            // TODO: specifically test this
             if (device.GroupKey == null)
             {
                 logger.LogError("Device does not support reprovisioning, re-create it or use a device with a version of 3 or higher");
@@ -281,8 +286,6 @@ class Program
         rootCommand.InvokeAsync(args).Wait();
         
         // TODO:
-        //  + cli tool
-        //  + TEST V2 DEVICES <---------
         //  + print sizes during provisioning (more logging in general)
         //  + fix weird logging
     }
