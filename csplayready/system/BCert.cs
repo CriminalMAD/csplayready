@@ -446,20 +446,20 @@ public class CertificateChain(Dictionary<string, object> data) : BCertStructs
     {
         data["certificate_count"] = Count() + 1;
         ((List<object>)data["certificates"]).Add(bCert.GetData());
-        data["total_length"] = (uint)data["total_length"] + bCert.Dumps().Length;
+        data["total_length"] = (uint)data["total_length"] + (uint)bCert.Dumps().Length;
     }
     
     public void Prepend(Certificate bCert)
     {
         data["certificate_count"] = Count() + 1;
         ((List<object>)data["certificates"]).Insert(0, bCert.GetData());
-        data["total_length"] = (uint)data["total_length"] + bCert.Dumps().Length;
+        data["total_length"] = (uint)data["total_length"] + (uint)bCert.Dumps().Length;
     }
 
     public void Remove(int index)
     {
         data["certificate_count"] = Count() - 1;
-        data["total_length"] = (uint)data["total_length"] - Get(index).Dumps().Length;
+        data["total_length"] = (uint)data["total_length"] - (uint)Get(index).Dumps().Length;
         ((List<object>)data["certificates"]).RemoveAt(index);
     }
     

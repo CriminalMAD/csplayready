@@ -1,7 +1,6 @@
 ﻿using System.Collections;
 using System.Text;
 using Org.BouncyCastle.Asn1.X9;
-using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Math.EC;
 
@@ -37,24 +36,16 @@ public static class Utils
 
         return point;
     }
-    
-    public static ECPoint ToEcPoint(this byte[] data)
-    {
-        return ECNamedCurveTable.GetByName("secp256r1").Curve.CreatePoint(
-            new BigInteger(1, data[..32]),
-            new BigInteger(1, data[32..64])
-        );
-    }
-    
+
     public static string ToHex(this byte[] bytes) => string.Concat(bytes.Select(b => b.ToString("x2")));
     
     public static byte[] HexToBytes(this string hex)
     {
         if (string.IsNullOrWhiteSpace(hex))
-            throw new ArgumentException("Hex string cannot be null or empty.", nameof(hex));
+            throw new ArgumentException("Hex string cannot be null or empty");
 
         if (hex.Length % 2 != 0)
-            throw new FormatException("Hex string must have an even length.");
+            throw new FormatException("Hex string must have an even length");
 
         var bytes = new byte[hex.Length / 2];
         for (var i = 0; i < bytes.Length; i++)

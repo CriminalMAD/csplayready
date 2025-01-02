@@ -1,150 +1,289 @@
-﻿using System.Text;
-using System.Xml.Linq;
+﻿using csplayready.crypto;
 using csplayready.device;
 using csplayready.system;
+
+using System.CommandLine;
+using System.Net;
+using System.Text;
+using csplayready.license;
+using Microsoft.Extensions.Logging;
+using Org.BouncyCastle.Security;
 
 namespace csplayready;
 
 class Program
 {
-    private static readonly XNamespace DrmNs = "http://schemas.microsoft.com/DRM/2007/03/protocols";
-    
-    public static IEnumerable<string> GetAllLicenses(XDocument doc)
+    private const string Version = "0.5.0";
+
+    private static List<Key>? License(ILogger logger, Device device, Pssh pssh, string server)
     {
-        return doc.Descendants(DrmNs + "License").Select(l => l.Value);
+        var cdm = Cdm.FromDevice(device);
+        logger.LogInformation("Loaded device: {name}", device.GetName());
+        
+        var sessionId = cdm.Open();
+
+        var wrmHeaders = pssh.GetWrmHeaders();
+        if (wrmHeaders.Length == 0)
+        {
+            logger.LogError("PSSH does not contain any WRM headers");
+            return null;
+        }
+        
+        var challenge = cdm.GetLicenseChallenge(sessionId, wrmHeaders.First());
+        logger.LogInformation("Created license challenge");
+
+        using HttpClient client = new HttpClient();
+        var content = new StringContent(challenge, Encoding.UTF8, "text/xml");
+
+        HttpResponseMessage response = client.PostAsync(server, content).Result;
+        logger.LogInformation("Got license message");
+        
+        var responseBody = response.Content.ReadAsStringAsync().Result;
+        
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            logger.LogError("Failed to send challenge [{code}]: {error}", (int)response.StatusCode, responseBody);
+            return null;
+        }
+        
+        cdm.ParseLicense(sessionId, responseBody);
+        logger.LogInformation("License parsed successfully");
+
+        return cdm.GetKeys(sessionId);
     }
     
     public static void Main(string[] args)
     {
+        using ILoggerFactory factory = LoggerFactory.Create(builder => builder.AddConsole());
+        ILogger logger = factory.CreateLogger("csplayready");
         
-        /*using Org.BouncyCastle.Math;
-        using Org.BouncyCastle.Math.EC;
-        using Org.BouncyCastle.Utilities.Encoders;*/
-        /*EccKey key = EccKey.Generate();
-        Console.WriteLine("Private key: " + key.PrivateKey);
+        // license
 
-        EccKey messagePoint = EccKey.Generate();
-        Console.WriteLine("plaintext: " + messagePoint.PublicBytes().ToHex());
-
-        (ECPoint e1, ECPoint e2) = Crypto.Ecc256Encrypt(messagePoint.PublicKey, key.PublicKey);
-        Console.WriteLine("encrypted 1: " + e1.XCoord.ToBigInteger() + " " + e1.YCoord.ToBigInteger());
-        Console.WriteLine("encrypted 2: " + e2.XCoord.ToBigInteger() + " " + e2.YCoord.ToBigInteger());
-
-        var bytes = e1.ToBytes().Concat(e2.ToBytes()).ToArray();
-        Console.WriteLine("encrypted: " + bytes.ToHex());
-
-        var curve = ECNamedCurveTable.GetByName("secp256r1");
-        var domainParams = new ECDomainParameters(curve.Curve, curve.G, curve.N, curve.H);
-
-        var l1 = Utils.FromBytes(bytes[..64], domainParams);
-        var l2 = Utils.FromBytes(bytes[64..], domainParams);
-
-        ECPoint decryptedE = Crypto.Ecc256Decrypt(e1, e2, key.PrivateKey);
-        Console.WriteLine("decrypted e: " + decryptedE.ToBytes().ToHex());
-
-        ECPoint decryptedL = Crypto.Ecc256Decrypt(l1, l2, key.PrivateKey);
-        Console.WriteLine("decrypted l: " + decryptedL.ToBytes().ToHex());*/
-        /*
-        using constructcs;
-        using static constructcs.ParserBuilder;
-
-        string text = "AAADfHBzc2gAAAAAmgTweZhAQoarkuZb4IhflQAAA1xcAwAAAQABAFIDPABXAFIATQBIAEUAQQBEAEUAUgAgAHgAbQBsAG4" +
-                      "AcwA9ACIAaAB0AHQAcAA6AC8ALwBzAGMAaABlAG0AYQBzAC4AbQBpAGMAcgBvAHMAbwBmAHQALgBjAG8AbQAvAEQAUgBNAC" +
-                      "8AMgAwADAANwAvADAAMwAvAFAAbABhAHkAUgBlAGEAZAB5AEgAZQBhAGQAZQByACIAIAB2AGUAcgBzAGkAbwBuAD0AIgA0A" +
-                      "C4AMAAuADAALgAwACIAPgA8AEQAQQBUAEEAPgA8AFAAUgBPAFQARQBDAFQASQBOAEYATwA+ADwASwBFAFkATABFAE4APgAx" +
-                      "ADYAPAAvAEsARQBZAEwARQBOAD4APABBAEwARwBJAEQAPgBBAEUAUwBDAFQAUgA8AC8AQQBMAEcASQBEAD4APAAvAFAAUgB" +
-                      "PAFQARQBDAFQASQBOAEYATwA+ADwASwBJAEQAPgA0AFIAcABsAGIAKwBUAGIATgBFAFMAOAB0AEcAawBOAEYAVwBUAEUASA" +
-                      "BBAD0APQA8AC8ASwBJAEQAPgA8AEMASABFAEMASwBTAFUATQA+AEsATABqADMAUQB6AFEAUAAvAE4AQQA9ADwALwBDAEgAR" +
-                      "QBDAEsAUwBVAE0APgA8AEwAQQBfAFUAUgBMAD4AaAB0AHQAcABzADoALwAvAHAAcgBvAGYAZgBpAGMAaQBhAGwAcwBpAHQA" +
-                      "ZQAuAGsAZQB5AGQAZQBsAGkAdgBlAHIAeQAuAG0AZQBkAGkAYQBzAGUAcgB2AGkAYwBlAHMALgB3AGkAbgBkAG8AdwBzAC4" +
-                      "AbgBlAHQALwBQAGwAYQB5AFIAZQBhAGQAeQAvADwALwBMAEEAXwBVAFIATAA+ADwAQwBVAFMAVABPAE0AQQBUAFQAUgBJAE" +
-                      "IAVQBUAEUAUwA+ADwASQBJAFMAXwBEAFIATQBfAFYARQBSAFMASQBPAE4APgA4AC4AMQAuADIAMwAwADQALgAzADEAPAAvA" +
-                      "EkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVABUAFIASQBCAFUAVABFAFMAPgA8" +
-                      "AC8ARABBAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==";
-
-        var pssh = new Pssh(text);
-        Console.WriteLine(string.Join(", ", pssh.GetWrmHeaders()));*/
-        /*
-        using csplayready.license;
-
-        const string licenseString = "WE1SAAAAAANtHSY9EpvluoRHZaggdNEeAAMAAQAAAaYAAwACAAAAMgABAA0AAAAKAAEAAAAzAAAACgABAAEAMgAAAAwAAABMAAEANAAAAAoH0AACAAQAAABeAAEABQAAABIBkAEOAJYAZABkAAMABwAAACQAAQAIAAAAHJGhg9eD4K9Lstrmn5ELN3JA7wcAAAIANgAAACAAAAA5AAAAGB/ZIbbM7TVAjUvccXYNQ+kAAwAJAAAA8gABAAoAAACeHl06aWdatUKc9+vZTOADAQABAAMAgFpnAzpVEpVCWcpDHRv8K7dVTfDu1KVeLfpb4kvFWbD9hcNEDSpse946LHZRYsFw19sPnhs5sOnJe+Q/zy4EoX+BG9zZc6WCetrPhb/vKC2tGvwJrCqHFUE5DM82g5WjIV96cf61OQtSLMvrIT0dJmIV5YKfi5RTeAAb2kOj+AE7AAAAKgAAAEwAAQBA8yyUn9LQzBQonmbYcnuUQ3iZMVxdjP3VDDi5goFt3ofTWrFdOT4MXi0YKUE4G/zk8Xp6gPHkJjG8XKsM6mTbPQABAAsAAAAcAAEAELeiTV1WtdIiQPmFZnF1JN4=";
-
-        var data = Convert.FromBase64String(licenseString);
-        var license = XmrLicense.Loads(data);
-
-        Utils.PrintObject(license.GetObject(10));*/
-        /*
-        using csplayready.crypto;
-        using csplayready.device;
-        using csplayready.system;
-        using Org.BouncyCastle.Security;
-
-        var encryptionKey = EccKey.Load(@"C:\Users\titus\RiderProjects\csplayready\csplayready\hisense\encr.dat");
-        var signingKey = EccKey.Load(@"C:\Users\titus\RiderProjects\csplayready\csplayready\hisense\sig.dat");
-
-        var groupKey = EccKey.Load(@"C:\Users\titus\RiderProjects\csplayready\csplayready\hisense\zgpriv.dat");
-        var certificateChain = CertificateChain.Load(@"C:\Users\titus\RiderProjects\csplayready\csplayready\hisense\bgroupcert.dat");
-
-        if (!certificateChain.Get(0).GetIssuerKey()!.SequenceEqual(groupKey.PublicBytes()))
-            throw new InvalidCertificateChain("Group key does not match this certificate");
-
-        var random = new SecureRandom();
-        var certId = random.GenerateSeed(16);
-        var clientId = random.GenerateSeed(16);
-
-        var leafCert = Certificate.NewLeafCertificate(certId, (uint)certificateChain.GetSecurityLevel()!, clientId, signingKey, encryptionKey, groupKey, certificateChain);
-        certificateChain.Prepend(leafCert);
-
-        Console.WriteLine("Valid: " + certificateChain.Verify());
-
-        var device = new Device(3, groupKey, encryptionKey, signingKey, certificateChain);
-        device.Dump("fourth_cs_device.prd");*/
-
-        // TODO: 
-        //  + make Utils class better
-        //  + more exceptions
-        //  + cli tool
+        var license = new Command("license", "Make a License Request to a server using a given PSSH");
         
-        var device = Device.Load(args[0]);
-        var cdm = Cdm.FromDevice(device);
-        var sessionId = cdm.Open();
-
-        var pssh = new Pssh(
-            "AAADfHBzc2gAAAAAmgTweZhAQoarkuZb4IhflQAAA1xcAwAAAQABAFIDPABXAFIATQBIAEUAQQBEAEUAUgAgAHgAbQBsAG4Ac" +
-            "wA9ACIAaAB0AHQAcAA6AC8ALwBzAGMAaABlAG0AYQBzAC4AbQBpAGMAcgBvAHMAbwBmAHQALgBjAG8AbQAvAEQAUgBNAC8AMgAwADAANw" +
-            "AvADAAMwAvAFAAbABhAHkAUgBlAGEAZAB5AEgAZQBhAGQAZQByACIAIAB2AGUAcgBzAGkAbwBuAD0AIgA0AC4AMAAuADAALgAwACIAPgA" +
-            "8AEQAQQBUAEEAPgA8AFAAUgBPAFQARQBDAFQASQBOAEYATwA+ADwASwBFAFkATABFAE4APgAxADYAPAAvAEsARQBZAEwARQBOAD4APABB" +
-            "AEwARwBJAEQAPgBBAEUAUwBDAFQAUgA8AC8AQQBMAEcASQBEAD4APAAvAFAAUgBPAFQARQBDAFQASQBOAEYATwA+ADwASwBJAEQAPgA0A" +
-            "FIAcABsAGIAKwBUAGIATgBFAFMAOAB0AEcAawBOAEYAVwBUAEUASABBAD0APQA8AC8ASwBJAEQAPgA8AEMASABFAEMASwBTAFUATQA+AE" +
-            "sATABqADMAUQB6AFEAUAAvAE4AQQA9ADwALwBDAEgARQBDAEsAUwBVAE0APgA8AEwAQQBfAFUAUgBMAD4AaAB0AHQAcABzADoALwAvAHA" +
-            "AcgBvAGYAZgBpAGMAaQBhAGwAcwBpAHQAZQAuAGsAZQB5AGQAZQBsAGkAdgBlAHIAeQAuAG0AZQBkAGkAYQBzAGUAcgB2AGkAYwBlAHMA" +
-            "LgB3AGkAbgBkAG8AdwBzAC4AbgBlAHQALwBQAGwAYQB5AFIAZQBhAGQAeQAvADwALwBMAEEAXwBVAFIATAA+ADwAQwBVAFMAVABPAE0AQ" +
-            "QBUAFQAUgBJAEIAVQBUAEUAUwA+ADwASQBJAFMAXwBEAFIATQBfAFYARQBSAFMASQBPAE4APgA4AC4AMQAuADIAMwAwADQALgAzADEAPA" +
-            "AvAEkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVABUAFIASQBCAFUAVABFAFMAPgA8AC8ARAB" +
-            "BAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==");
-
-        var wrmHeaders = pssh.GetWrmHeaders();
-        var challenge = cdm.GetLicenseChallenge(sessionId, wrmHeaders[0]);
-
-        Console.WriteLine(challenge);
-
-        using HttpClient client = new HttpClient();
-        const string url = "https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:2000)";
-        var content = new StringContent(challenge, Encoding.UTF8, "text/xml");
+        var deviceNameArg = new Argument<FileInfo>(name: "prdFile", description: "Device path") { Arity = ArgumentArity.ExactlyOne };
+        var psshArg = new Argument<string>(name: "pssh", description: "PSSH") { Arity = ArgumentArity.ExactlyOne };
+        var serverArg = new Argument<string>(name: "server", description: "Server URL") { Arity = ArgumentArity.ExactlyOne };
         
-        HttpResponseMessage response = client.PostAsync(url, content).Result;
-        response.EnsureSuccessStatusCode();
-        var responseBody = response.Content.ReadAsStringAsync().Result;
+        license.AddArgument(deviceNameArg);
+        license.AddArgument(psshArg);
+        license.AddArgument(serverArg);
         
-        Console.WriteLine(responseBody);
-        
-        cdm.ParseLicense(sessionId, responseBody);
-
-        foreach (var key in cdm.GetKeys(sessionId))
+        license.SetHandler(context =>
         {
-            Console.WriteLine($"{key.KeyId.ToHex()}:{key.RawKey.ToHex()}");
-        }
+            var device = Device.Load(context.ParseResult.GetValueForArgument(deviceNameArg).FullName);
+            var pssh = new Pssh(context.ParseResult.GetValueForArgument(psshArg));
+            var server = context.ParseResult.GetValueForArgument(serverArg);
+
+            var keys = License(logger, device, pssh, server);
+            if (keys == null)
+                return;
+            
+            foreach (var key in keys)
+            {
+                logger.LogInformation("{keyId}:{key}", key.KeyId.ToHex(), key.RawKey.ToHex());
+            }
+        });
         
-        cdm.Close(sessionId);
+        // test
+      
+        var test = new Command("test", "Test the CDM code by getting Content Keys for the Tears Of Steel demo on the Playready Test Server");
+        
+        var deviceNameArg2 = new Argument<FileInfo>(name: "prdFile", description: "Device path") { Arity = ArgumentArity.ExactlyOne };
+        
+        test.AddArgument(deviceNameArg2);
+        
+        test.SetHandler(context =>
+        {
+            var device = Device.Load(context.ParseResult.GetValueForArgument(deviceNameArg2).FullName);
+            var pssh = new Pssh(
+                "AAADfHBzc2gAAAAAmgTweZhAQoarkuZb4IhflQAAA1xcAwAAAQABAFIDPABXAFIATQBIAEUAQQBEAEUAUgAgAHgAbQBsAG" +
+                "4AcwA9ACIAaAB0AHQAcAA6AC8ALwBzAGMAaABlAG0AYQBzAC4AbQBpAGMAcgBvAHMAbwBmAHQALgBjAG8AbQAvAEQAUgBNAC8AMgAw" +
+                "ADAANwAvADAAMwAvAFAAbABhAHkAUgBlAGEAZAB5AEgAZQBhAGQAZQByACIAIAB2AGUAcgBzAGkAbwBuAD0AIgA0AC4AMAAuADAALg" +
+                "AwACIAPgA8AEQAQQBUAEEAPgA8AFAAUgBPAFQARQBDAFQASQBOAEYATwA+ADwASwBFAFkATABFAE4APgAxADYAPAAvAEsARQBZAEwA" +
+                "RQBOAD4APABBAEwARwBJAEQAPgBBAEUAUwBDAFQAUgA8AC8AQQBMAEcASQBEAD4APAAvAFAAUgBPAFQARQBDAFQASQBOAEYATwA+AD" +
+                "wASwBJAEQAPgA0AFIAcABsAGIAKwBUAGIATgBFAFMAOAB0AEcAawBOAEYAVwBUAEUASABBAD0APQA8AC8ASwBJAEQAPgA8AEMASABF" +
+                "AEMASwBTAFUATQA+AEsATABqADMAUQB6AFEAUAAvAE4AQQA9ADwALwBDAEgARQBDAEsAUwBVAE0APgA8AEwAQQBfAFUAUgBMAD4AaA" +
+                "B0AHQAcABzADoALwAvAHAAcgBvAGYAZgBpAGMAaQBhAGwAcwBpAHQAZQAuAGsAZQB5AGQAZQBsAGkAdgBlAHIAeQAuAG0AZQBkAGkA" +
+                "YQBzAGUAcgB2AGkAYwBlAHMALgB3AGkAbgBkAG8AdwBzAC4AbgBlAHQALwBQAGwAYQB5AFIAZQBhAGQAeQAvADwALwBMAEEAXwBVAF" +
+                "IATAA+ADwAQwBVAFMAVABPAE0AQQBUAFQAUgBJAEIAVQBUAEUAUwA+ADwASQBJAFMAXwBEAFIATQBfAFYARQBSAFMASQBPAE4APgA4" +
+                "AC4AMQAuADIAMwAwADQALgAzADEAPAAvAEkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVA" +
+                "BUAFIASQBCAFUAVABFAFMAPgA8AC8ARABBAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==");
+            const string server = "https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:2000)";
+            
+            var keys = License(logger, device, pssh, server);
+            if (keys == null)
+                return;
+            
+            foreach (var key in keys)
+            {
+                logger.LogInformation("{keyId}:{key}", key.KeyId.ToHex(), key.RawKey.ToHex());
+            }
+        });
+        
+        // create-device
+        
+        var createDevice = new Command("create-device", "Create a Playready Device (.prd) file from an ECC private group key (optionally encryption/signing key) and group certificate chain");
+        
+        var groupKeyOption = new Option<FileInfo>(["-k", "--group_key"], "Device ECC private group key") { IsRequired = true };
+        var encryptionKeyOption = new Option<FileInfo>(["-e", "--encryption_key"], "Optional Device ECC private encryption key");
+        var signingKeyOption = new Option<FileInfo>(["-s", "--signing_key"], "Optional Device ECC private signing key");
+        var groupCertOption = new Option<FileInfo>(["-c", "--group_certificate"], "Device group certificate chain") { IsRequired = true };
+        var outputOption = new Option<FileInfo>(["-o", "--output"], "Output file name");
+
+        createDevice.AddOption(groupKeyOption);
+        createDevice.AddOption(encryptionKeyOption);
+        createDevice.AddOption(signingKeyOption);
+        createDevice.AddOption(groupCertOption);
+        createDevice.AddOption(outputOption);
+
+        createDevice.SetHandler(context =>
+        {
+            var groupKey = EccKey.Load(context.ParseResult.GetValueForOption(groupKeyOption)!.FullName);
+            
+            var encryptionKeyArg = context.ParseResult.GetValueForOption(encryptionKeyOption);
+            var encryptionKey = encryptionKeyArg == null ? EccKey.Generate() : EccKey.Load(encryptionKeyArg.FullName);
+            
+            var signingKeyArg = context.ParseResult.GetValueForOption(signingKeyOption);
+            var signingKey = signingKeyArg == null ? EccKey.Generate() : EccKey.Load(signingKeyArg.FullName);
+            
+            var certificateChain = CertificateChain.Load(context.ParseResult.GetValueForOption(groupCertOption)!.FullName);
+
+            if (!certificateChain.Get(0).GetIssuerKey()!.SequenceEqual(groupKey.PublicBytes()))
+            {
+                logger.LogError("Group key does not match this certificate");
+                return;
+            }
+            
+            var random = new SecureRandom();
+            var certId = random.GenerateSeed(16);
+            var clientId = random.GenerateSeed(16);
+
+            var leafCert = Certificate.NewLeafCertificate(certId, (uint)certificateChain.GetSecurityLevel()!, clientId, signingKey, encryptionKey, groupKey, certificateChain);
+            certificateChain.Prepend(leafCert);
+            
+            logger.LogInformation("Certificate validity: {validity}", certificateChain.Verify());
+
+            var device = new Device(groupKey, encryptionKey, signingKey, certificateChain);
+            
+            var outputArg = context.ParseResult.GetValueForOption(outputOption);
+            var saveName = outputArg == null ? $"{device.GetName()}.prd" : outputArg.FullName;
+            logger.LogInformation("Saving to: {name}", saveName);
+            
+            device.Dump(saveName);
+        });
+        
+        // reprovision-device
+        
+        var reprovisionDevice = new Command("reprovision-device", "Reprovision a Playready Device (.prd) by creating a new leaf certificate and new encryption/signing keys");
+        
+        var deviceNameArg3 = new Argument<FileInfo>(name: "prdFile", description: "Device to reprovision") { Arity = ArgumentArity.ExactlyOne };
+        var encryptionKeyOption2 = new Option<FileInfo>(["-e", "--encryption_key"], "Optional Device ECC private encryption key");
+        var signingKeyOption2 = new Option<FileInfo>(["-s", "--signing_key"], "Optional Device ECC private signing key");
+        var outputOption2 = new Option<string>(["-o", "--output"], "Output file name");
+        
+        reprovisionDevice.AddArgument(deviceNameArg3);
+        reprovisionDevice.AddOption(encryptionKeyOption2);
+        reprovisionDevice.AddOption(signingKeyOption2);
+        reprovisionDevice.AddOption(outputOption2);
+        
+        reprovisionDevice.SetHandler(context =>
+        {
+            var deviceName = context.ParseResult.GetValueForArgument(deviceNameArg3);
+            var device = Device.Load(deviceName.FullName);
+            
+            var encryptionKeyArg = context.ParseResult.GetValueForOption(encryptionKeyOption2);
+            var encryptionKey = encryptionKeyArg == null ? EccKey.Generate() : EccKey.Load(encryptionKeyArg.FullName);
+            
+            var signingKeyArg = context.ParseResult.GetValueForOption(signingKeyOption2);
+            var signingKey = signingKeyArg == null ? EccKey.Generate() : EccKey.Load(signingKeyArg.FullName);
+            
+            // TODO: specifically test this
+            if (device.GroupKey == null)
+            {
+                logger.LogError("Device does not support reprovisioning, re-create it or use a device with a version of 3 or higher");
+                return;
+            }
+            
+            device.EncryptionKey = encryptionKey;
+            device.SigningKey = signingKey;
+            
+            var random = new SecureRandom();
+            var certId = random.GenerateSeed(16);
+            var clientId = random.GenerateSeed(16);
+
+            device.GroupCertificate!.Remove(0);
+            
+            var leafCert = Certificate.NewLeafCertificate(certId, (uint)device.GroupCertificate.GetSecurityLevel()!, clientId, signingKey, encryptionKey, device.GroupKey, device.GroupCertificate);
+            device.GroupCertificate.Prepend(leafCert);
+            
+            logger.LogInformation("Certificate validity: {validity}", device.GroupCertificate.Verify());
+       
+            var outputArg = context.ParseResult.GetValueForOption(outputOption2);
+            var saveName = outputArg ?? $"{device.GetName()}.prd";
+            logger.LogInformation("Saving to: {name}", saveName);
+            
+            device.Dump(saveName);
+        });
+        
+        // export-device
+        
+        var exportDevice = new Command("export-device", "Export a Playready Device (.prd) file to a group key and group certificate");
+        
+        var deviceNameArg4 = new Argument<FileInfo>(name: "prdFile", description: "Device to dump") { Arity = ArgumentArity.ExactlyOne };
+        var outputDirOption2 = new Option<string>(["-o", "--output"], "Output directory");
+        
+        exportDevice.AddArgument(deviceNameArg4);
+        exportDevice.AddOption(outputDirOption2);
+        
+        exportDevice.SetHandler(context =>
+        {
+            var deviceName = context.ParseResult.GetValueForArgument(deviceNameArg4);
+            var device = Device.Load(deviceName.FullName);
+            
+            var outputDirArg = context.ParseResult.GetValueForOption(outputDirOption2);
+
+            var outDir = outputDirArg ?? Path.GetFileNameWithoutExtension(deviceName.Name);;
+            if (Directory.Exists(outDir))
+            {
+                if (Directory.EnumerateFileSystemEntries(outDir).Any())
+                {
+                    logger.LogError("Output directory is not empty, cannot overwrite");
+                    return;
+                }
+                
+                logger.LogWarning("Output directory already exists, but is empty");
+            }
+            else
+            {
+                Directory.CreateDirectory(outDir);
+            }
+            
+            logger.LogInformation("SL{securityLevel} {name}", device.GroupCertificate!.GetSecurityLevel(), device.GetName());
+            logger.LogInformation("Saving to: {outDir}", outDir);
+            
+            device.GroupKey!.Dump(Path.Combine(outDir, "zgpriv.dat"));
+            logger.LogInformation("Exported group key as zgpriv.dat");
+            
+            device.GroupCertificate.Remove(0);
+            device.GroupCertificate.Dump(Path.Combine(outDir, "bgroupcert.dat"));
+            logger.LogInformation("Exported group certificate to bgroupcert.dat");
+        });
+        
+        var rootCommand = new RootCommand($"csplayready (https://github.com/ready-dl/csplayready) version {Version} Copyright (c) 2025-{DateTime.Now.Year} DevLARLEY");
+        
+        rootCommand.AddCommand(createDevice);
+        rootCommand.AddCommand(exportDevice);
+        rootCommand.AddCommand(license);
+        rootCommand.AddCommand(reprovisionDevice);
+        rootCommand.AddCommand(test);
+        
+        rootCommand.InvokeAsync(args).Wait();
+        
+        // TODO:
+        //  + cli tool
+        //  + TEST V2 DEVICES <---------
+        //  + print sizes during provisioning (more logging in general)
+        //  + fix weird logging
     }
 }

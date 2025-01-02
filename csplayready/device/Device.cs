@@ -7,7 +7,7 @@ using static csplayready.constructcs.ParserBuilder;
 
 namespace csplayready.device;
 
-public class Device(byte version, EccKey? groupKey, EccKey? encryptionKey, EccKey? signingKey, CertificateChain? groupCertificate)
+public class Device(EccKey? groupKey, EccKey? encryptionKey, EccKey? signingKey, CertificateChain? groupCertificate)
 {
     private static readonly Struct PrdV2 = new(
         Int32ub("group_certificate_length"),
@@ -34,14 +34,14 @@ public class Device(byte version, EccKey? groupKey, EccKey? encryptionKey, EccKe
             _ => throw new InvalidDataException($"Unknown PRD version {i}")
         })
     );
-    
-    public byte Version = version;
+
+    private const byte Version = 3;
     public EccKey? GroupKey = groupKey;
     public EccKey? EncryptionKey = encryptionKey;
     public EccKey? SigningKey = signingKey;
     public CertificateChain? GroupCertificate = groupCertificate;
 
-    public Device() : this(0, null, null, null, null) { }
+    private Device() : this(null, null, null, null) { }
 
     public static Device Loads(byte[] bytes)
     {
@@ -50,7 +50,6 @@ public class Device(byte version, EccKey? groupKey, EccKey? encryptionKey, EccKe
 
         Device device = new Device
         {
-            Version = (byte)result["version"],
             GroupKey = EccKey.Loads((byte[])data["group_key"]),
             EncryptionKey = EccKey.Loads((byte[])data["encryption_key"]),
             SigningKey = EccKey.Loads((byte[])data["signing_key"]),
@@ -69,7 +68,7 @@ public class Device(byte version, EccKey? groupKey, EccKey? encryptionKey, EccKe
         return Prd.Build(new Dictionary<string, object>
         {
             { "signature", "PRD"u8.ToArray() },
-            { "version", 3 },
+            { "version", Version },
             { "data", new Dictionary<string, object>
             {
                 { "group_key", GroupKey!.Dumps() },
