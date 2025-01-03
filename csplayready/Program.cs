@@ -1,11 +1,11 @@
 ﻿using csplayready.crypto;
 using csplayready.device;
 using csplayready.system;
+using csplayready.license;
 
 using System.CommandLine;
 using System.Net;
 using System.Text;
-using csplayready.license;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Security;
 
@@ -248,7 +248,7 @@ class Program
             
             var outputDirArg = context.ParseResult.GetValueForOption(outputDirOption2);
 
-            var outDir = outputDirArg ?? Path.GetFileNameWithoutExtension(deviceName.Name);;
+            var outDir = outputDirArg ?? Path.GetFileNameWithoutExtension(deviceName.Name);
             if (Directory.Exists(outDir))
             {
                 if (Directory.EnumerateFileSystemEntries(outDir).Any())
@@ -284,9 +284,5 @@ class Program
         rootCommand.AddCommand(test);
         
         rootCommand.InvokeAsync(args).Wait();
-        
-        // TODO:
-        //  + print sizes during provisioning (more logging in general)
-        //  + fix weird logging
     }
 }

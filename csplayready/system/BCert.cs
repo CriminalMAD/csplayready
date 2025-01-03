@@ -24,7 +24,7 @@ public class BCertStructs
         Bytes("account_id", 16),
         Int32ub("revision_timestamp"),
         Int32ub("domain_url_length"),
-        Bytes("domain_url", ctx => ((uint)ctx["domain_url_length"] + 3) & 0xfffffffc) // TODO: use string
+        Bytes("domain_url", ctx => ((uint)ctx["domain_url_length"] + 3) & 0xfffffffc)
     );
     
     protected static readonly Struct DrmBCertPcInfo = new(
@@ -57,11 +57,11 @@ public class BCertStructs
     protected static readonly Struct DrmBCertManufacturerInfo = new(
         Int32ub("flags"),
         Int32ub("manufacturer_name_length"),
-        Bytes("manufacturer_name", ctx => ((uint)ctx["manufacturer_name_length"] + 3) & 0xfffffffc), // TODO: use string
+        Bytes("manufacturer_name", ctx => ((uint)ctx["manufacturer_name_length"] + 3) & 0xfffffffc),
         Int32ub("model_name_length"),
-        Bytes("model_name", ctx => ((uint)ctx["model_name_length"] + 3) & 0xfffffffc), // TODO: use string
+        Bytes("model_name", ctx => ((uint)ctx["model_name_length"] + 3) & 0xfffffffc),
         Int32ub("model_number_length"),
-        Bytes("model_number", ctx => ((uint)ctx["model_number_length"] + 3) & 0xfffffffc) // TODO: use string
+        Bytes("model_number", ctx => ((uint)ctx["model_number_length"] + 3) & 0xfffffffc)
     );
     
     protected static readonly Struct DrmBCertSignatureInfo = new(
@@ -80,7 +80,7 @@ public class BCertStructs
     protected static readonly Struct DrmBCertMeteringInfo = new(
         Bytes("metering_id", 16),
         Int32ub("metering_url_length"),
-        Bytes("metering_url", ctx => ((uint)ctx["metering_url_length"] + 3) & 0xfffffffc) // TODO: use string
+        Bytes("metering_url", ctx => ((uint)ctx["metering_url_length"] + 3) & 0xfffffffc)
     );
     
     protected static readonly Struct DrmBCertExtDataSignKeyInfo = new(
