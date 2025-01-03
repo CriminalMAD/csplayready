@@ -109,7 +109,7 @@ jobs:
           gh release create v${{ github.run_number }} \
             --draft \
             --title "Release v${{ github.run_number }}" \
-            --notes "Automated release v${{ github.run_number }}"
+            --notes "Automated release v${{ github.run_number }}" \
             --repo ${{ github.repository }}
             
           for file in */*; do
