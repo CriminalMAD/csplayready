@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload
         run: |
-          until gh release upload ${{ github.run_number }} --repo ${{ github.repository }} ${{ github.event.inputs.tag }} --clobber *.zip *.tar.gz; do
+          until gh release upload v${{ github.run_number }} --repo ${{ github.repository }} ${{ github.event.inputs.tag }} --clobber *.zip *.tar.gz; do
             echo "Attempt $((++attempts)) to upload release artifacts failed. Will retry in 20s"
             sleep 20
           done
