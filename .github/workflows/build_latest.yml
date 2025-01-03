@@ -1,5 +1,8 @@
 name: Build Latest Release
 
+env:
+  DOTNET_SDK_VERSION: "8.0.*"
+
 on:
   push:
     branches: [ main ]
@@ -17,7 +20,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
           
       - name: Build Windows
         run: dotnet publish csplayready -c Release -r win-${{ matrix.arch }} --self-contained true
@@ -33,6 +36,7 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
+    container: mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-18.04-cross-arm64-20220312201346-b2c2436
     strategy:
       matrix:
         arch: [x64, arm64]
@@ -42,10 +46,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
           
       - name: Build Linux
-        run: dotnet publish csplayready -c Release -r linux-${{ matrix.arch }} --self-contained true
+        run: dotnet publish csplayready -c Release -r linux-${{ matrix.arch }} --self-contained true -p:StripSymbols=true -p:CppCompilerAndLinker=clang-9 -p:SysRoot=/crossrootfs/arm64
         
       - name: Tar Release
         run: tar -czf csplayready-linux-${{ matrix.arch }}.tar.gz -C csplayready/bin/Release/net9.0/linux-${{ matrix.arch }}/publish/ .
@@ -64,7 +68,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
           
       - name: Build macOS (x64)
         run: dotnet publish csplayready -c Release -r osx-x64 --self-contained true
