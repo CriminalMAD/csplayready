@@ -3,7 +3,6 @@ using csplayready.system;
 
 using BinaryStruct;
 using static BinaryStruct.ParserBuilder;
-
 using System.Text.RegularExpressions;
 
 namespace csplayready.device;
