@@ -1,9 +1,9 @@
-﻿using csplayready.constructcs;
-using static csplayready.constructcs.ParserBuilder;
+﻿using BinaryStruct;
+using static BinaryStruct.ParserBuilder;
 
 namespace csplayready.system;
 
-public class PsshStructs()
+public class PsshStructs
 {
     private static readonly Struct PlayreadyObject = new(
         Int16ul("type"),

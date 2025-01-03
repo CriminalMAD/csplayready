@@ -1,8 +1,8 @@
-﻿using csplayready.constructcs;
-using Org.BouncyCastle.Crypto.Engines;
+﻿using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Macs;
 using Org.BouncyCastle.Crypto.Parameters;
-using static csplayready.constructcs.ParserBuilder;
+using BinaryStruct;
+using static BinaryStruct.ParserBuilder;
 
 namespace csplayready.license;
 

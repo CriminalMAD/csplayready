@@ -1,9 +1,9 @@
-﻿using System.Text;
-using csplayready.constructcs;
-using csplayready.crypto;
+﻿using csplayready.crypto;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Math;
-using static csplayready.constructcs.ParserBuilder;
+using BinaryStruct;
+using static BinaryStruct.ParserBuilder;
+using Encoding = System.Text.Encoding;
 
 namespace csplayready.system;
 

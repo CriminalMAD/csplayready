@@ -1,9 +1,10 @@
-﻿using System.Text.RegularExpressions;
-using csplayready.crypto;
-
-using csplayready.constructcs;
+﻿using csplayready.crypto;
 using csplayready.system;
-using static csplayready.constructcs.ParserBuilder;
+
+using BinaryStruct;
+using static BinaryStruct.ParserBuilder;
+
+using System.Text.RegularExpressions;
 
 namespace csplayready.device;
 
