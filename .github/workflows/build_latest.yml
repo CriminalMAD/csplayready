@@ -97,6 +97,8 @@ jobs:
     name: Create Github draft release
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Audit gh version
         run: gh --version
