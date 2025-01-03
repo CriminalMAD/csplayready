@@ -93,7 +93,7 @@ jobs:
           name: csplayready-mac-arm64
           path: csplayready-mac-arm64.tar.gz
 
-create-release:
+  create-release:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
