@@ -7,6 +7,13 @@
         <Nullable>enable</Nullable>
         <PublishAot>true</PublishAot>
         <InvariantGlobalization>true</InvariantGlobalization>
+        <Version>0.5.0</Version>
+        <PackageId>csplayready</PackageId>
+        <Authors>DevLARLEY</Authors>
+        <Description>C# implementation of Microsoft's Playready DRM CDM (Content Decryption Module)</Description>
+        <RepositoryUrl>https://github.com/ready-dl/csplayready</RepositoryUrl>
+        <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,6 +21,8 @@
       <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
       <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
       <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+      <None Include="..\README.md" Pack="true" PackagePath="\" />
+      <None Include="..\LICENSE.txt" Pack="true" PackagePath=""/>
     </ItemGroup>
 
 </Project>
