@@ -3,6 +3,9 @@ name: Build Latest Release
 env:
   DOTNET_SDK_VERSION: "9.0.*"
 
+on:
+  workflow_dispatch:
+
 jobs:
   build-windows:
     runs-on: windows-latest
