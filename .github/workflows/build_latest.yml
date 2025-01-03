@@ -92,10 +92,9 @@ jobs:
         with:
           name: csplayready-mac-arm64
           path: csplayready-mac-arm64.tar.gz
-          
+
   create_draft_release:
     name: Create Github draft release
-    if: ${{ github.event.inputs.doRelease == 'true' }}
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
@@ -133,7 +132,6 @@ jobs:
 
   attach_to_release:
     name: Attach native executables to release
-    if: ${{ github.event.inputs.doRelease == 'true' }}
     needs: create_draft_release
     runs-on: ubuntu-latest
     steps:
