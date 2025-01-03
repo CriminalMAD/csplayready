@@ -93,28 +93,26 @@ jobs:
           name: csplayready-mac-arm64
           path: csplayready-mac-arm64.tar.gz
 
-  create-release:
+create-release:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v3
         
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
-          draft: true
-          prerelease: false
-          
-      - name: Upload Release Assets
+      - name: Create Release and Upload Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Create release
+          gh release create v${{ github.run_number }} \
+            --draft \
+            --title "Release v${{ github.run_number }}" \
+            --notes "Automated release v${{ github.run_number }}"
+            
+          # Upload all artifacts
           for file in */*; do
             if [ -f "$file" ]; then
               gh release upload v${{ github.run_number }} "$file"
