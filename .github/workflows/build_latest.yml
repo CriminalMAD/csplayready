@@ -23,7 +23,7 @@ jobs:
         run: dotnet publish csplayready -c Release -r win-${{ matrix.arch }} --self-contained true
         
       - name: Zip Release
-        run: Compress-Archive -Path "csplayready/bin/Release/net8.0/win-${{ matrix.arch }}/publish/*" -DestinationPath "csplayready-win-${{ matrix.arch }}.zip"
+        run: Compress-Archive -Path "csplayready/bin/Release/net9.0/win-${{ matrix.arch }}/publish/*" -DestinationPath "csplayready-win-${{ matrix.arch }}.zip"
         
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
@@ -48,7 +48,7 @@ jobs:
         run: dotnet publish csplayready -c Release -r linux-${{ matrix.arch }} --self-contained true
         
       - name: Tar Release
-        run: tar -czf csplayready-linux-${{ matrix.arch }}.tar.gz -C csplayready/bin/Release/net8.0/linux-${{ matrix.arch }}/publish/ .
+        run: tar -czf csplayready-linux-${{ matrix.arch }}.tar.gz -C csplayready/bin/Release/net9.0/linux-${{ matrix.arch }}/publish/ .
         
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
@@ -73,10 +73,10 @@ jobs:
         run: dotnet publish csplayready -c Release -r osx-arm64 --self-contained true
         
       - name: Tar Release (x64)
-        run: tar -czf csplayready-mac-x64.tar.gz -C csplayready/bin/Release/net8.0/osx-x64/publish/ .
+        run: tar -czf csplayready-mac-x64.tar.gz -C csplayready/bin/Release/net9.0/osx-x64/publish/ .
         
       - name: Tar Release (arm64)
-        run: tar -czf csplayready-mac-arm64.tar.gz -C csplayready/bin/Release/net8.0/osx-arm64/publish/ .
+        run: tar -czf csplayready-mac-arm64.tar.gz -C csplayready/bin/Release/net9.0/osx-arm64/publish/ .
         
       - name: Upload Artifact (x64)
         uses: actions/upload-artifact@v3
