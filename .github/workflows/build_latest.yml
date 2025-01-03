@@ -36,10 +36,9 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-    container: mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-18.04-cross-arm64-20220312201346-b2c2436
     strategy:
       matrix:
-        arch: [x64, arm64]
+        arch: [x64]
     steps:
       - uses: actions/checkout@v3
       
@@ -49,7 +48,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
           
       - name: Build Linux
-        run: dotnet publish csplayready -c Release -r linux-${{ matrix.arch }} --self-contained true -p:StripSymbols=true -p:CppCompilerAndLinker=clang-9 -p:SysRoot=/crossrootfs/arm64
+        run: dotnet publish csplayready -c Release -r linux-${{ matrix.arch }} --self-contained true
         
       - name: Tar Release
         run: tar -czf csplayready-linux-${{ matrix.arch }}.tar.gz -C csplayready/bin/Release/net9.0/linux-${{ matrix.arch }}/publish/ .
