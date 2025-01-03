@@ -1,0 +1,119 @@
+name: Build Latest Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+          
+      - name: Build Windows
+        run: dotnet publish csplayready -c Release -r win-${{ matrix.arch }} --self-contained true
+        
+      - name: Zip Release
+        run: Compress-Archive -Path "csplayready/bin/Release/net8.0/win-${{ matrix.arch }}/publish/*" -DestinationPath "csplayready-win-${{ matrix.arch }}.zip"
+        
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: csplayready-win-${{ matrix.arch }}
+          path: csplayready-win-${{ matrix.arch }}.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+          
+      - name: Build Linux
+        run: dotnet publish csplayready -c Release -r linux-${{ matrix.arch }} --self-contained true
+        
+      - name: Tar Release
+        run: tar -czf csplayready-linux-${{ matrix.arch }}.tar.gz -C csplayready/bin/Release/net8.0/linux-${{ matrix.arch }}/publish/ .
+        
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: csplayready-linux-${{ matrix.arch }}
+          path: csplayready-linux-${{ matrix.arch }}.tar.gz
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+          
+      - name: Build macOS (x64)
+        run: dotnet publish csplayready -c Release -r osx-x64 --self-contained true
+        
+      - name: Build macOS (arm64)
+        run: dotnet publish csplayready -c Release -r osx-arm64 --self-contained true
+        
+      - name: Tar Release (x64)
+        run: tar -czf csplayready-mac-x64.tar.gz -C csplayready/bin/Release/net8.0/osx-x64/publish/ .
+        
+      - name: Tar Release (arm64)
+        run: tar -czf csplayready-mac-arm64.tar.gz -C csplayready/bin/Release/net8.0/osx-arm64/publish/ .
+        
+      - name: Upload Artifact (x64)
+        uses: actions/upload-artifact@v3
+        with:
+          name: csplayready-mac-x64
+          path: csplayready-mac-x64.tar.gz
+          
+      - name: Upload Artifact (arm64)
+        uses: actions/upload-artifact@v3
+        with:
+          name: csplayready-mac-arm64
+          path: csplayready-mac-arm64.tar.gz
+
+  create-release:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          draft: true
+          prerelease: false
+          
+      - name: Upload Release Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for file in */*; do
+            if [ -f "$file" ]; then
+              gh release upload v${{ github.run_number }} "$file"
+            fi
+          done
