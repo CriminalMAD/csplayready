@@ -23,13 +23,12 @@ public static class Crypto
         return cipher.DoFinal(data);
     }
 
-    public static byte[] AesCbcDecrypt(byte[] key, byte[] iv, byte[] data)
+    public static byte[] AesEcbEncrypt(byte[] key, byte[] data)
     {
-        var cipher = CipherUtilities.GetCipher("AES/CBC/PKCS7");
+        var cipher = CipherUtilities.GetCipher("AES/ECB/NoPadding");
         var keyParam = new KeyParameter(key);
-        var parameters = new ParametersWithIV(keyParam, iv);
-        
-        cipher.Init(false, parameters);
+
+        cipher.Init(true, keyParam);
         return cipher.DoFinal(data);
     }
     

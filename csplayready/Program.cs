@@ -13,7 +13,7 @@ namespace csplayready;
 
 class Program
 {
-    private const string Version = "0.5.0";
+    private const string Version = "0.5.2";
 
     private static List<Key>? License(ILogger logger, Device device, Pssh pssh, string server)
     {
@@ -96,8 +96,14 @@ class Program
         var test = new Command("test", "Test the CDM code by getting Content Keys for the Tears Of Steel demo on the Playready Test Server");
         
         var deviceNameArg2 = new Argument<FileInfo>(name: "prdFile", description: "Device path") { Arity = ArgumentArity.ExactlyOne };
+        var encryptionType = new Option<string>(["-c", "--ckt"], description: "Content key encryption type", getDefaultValue: () => "aesctr");
+        encryptionType.FromAmong("aesctr", "aescbc");
+        var securityLevel = new Option<string>(["-sl", "--security_level"], description: "Minimum security level", getDefaultValue: () => "2000" );
+        securityLevel.FromAmong("150", "2000", "3000");
         
         test.AddArgument(deviceNameArg2);
+        test.AddOption(encryptionType);
+        test.AddOption(securityLevel);
         
         test.SetHandler(context =>
         {
@@ -115,7 +121,10 @@ class Program
                 "IATAA+ADwAQwBVAFMAVABPAE0AQQBUAFQAUgBJAEIAVQBUAEUAUwA+ADwASQBJAFMAXwBEAFIATQBfAFYARQBSAFMASQBPAE4APgA4" +
                 "AC4AMQAuADIAMwAwADQALgAzADEAPAAvAEkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVA" +
                 "BUAFIASQBCAFUAVABFAFMAPgA8AC8ARABBAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==");
-            const string server = "https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:2000)";
+
+            var encryptionTypeArg = context.ParseResult.GetValueForOption(encryptionType);
+            var securityLevelArg = context.ParseResult.GetValueForOption(securityLevel);
+            var server = $"https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:{securityLevelArg},ckt:{encryptionTypeArg})";
             
             var keys = License(logger, device, pssh, server);
             if (keys == null)

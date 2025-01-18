@@ -7,7 +7,7 @@
         <Nullable>enable</Nullable>
         <PublishAot>true</PublishAot>
         <InvariantGlobalization>true</InvariantGlobalization>
-        <Version>0.5.0</Version>
+        <Version>0.5.2</Version>
         <PackageId>csplayready</PackageId>
         <Authors>DevLARLEY</Authors>
         <Description>C# implementation of Microsoft's Playready DRM CDM (Content Decryption Module)</Description>

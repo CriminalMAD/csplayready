@@ -14,19 +14,22 @@ namespace csplayready;
 
 public class Cdm
 {
-    public static readonly int MaxNumOfSessions = 16;
+    private const int MaxNumOfSessions = 16;
 
-    private static readonly byte[] RawWmrmEcc256PubKey =
-        "c8b6af16ee941aadaa5389b4af2c10e356be42af175ef3face93254e7b0b3d9b982b27b5cb2341326e56aa857dbfd5c634ce2cf9ea74fca8f2af5957efeea562"
-            .HexToBytes();
-    
+    private static readonly byte[] RawWmrmEcc256PubKey = [
+        0xc8, 0xb6, 0xaf, 0x16, 0xee, 0x94, 0x1a, 0xad, 0xaa, 0x53, 0x89, 0xb4, 0xaf, 0x2c, 0x10, 0xe3, 
+        0x56, 0xbe, 0x42, 0xaf, 0x17, 0x5e, 0xf3, 0xfa, 0xce, 0x93, 0x25, 0x4e, 0x7b, 0x0b, 0x3d, 0x9b, 
+        0x98, 0x2b, 0x27, 0xb5, 0xcb, 0x23, 0x41, 0x32, 0x6e, 0x56, 0xaa, 0x85, 0x7d, 0xbf, 0xd5, 0xc6, 
+        0x34, 0xce, 0x2c, 0xf9, 0xea, 0x74, 0xfc, 0xa8, 0xf2, 0xaf, 0x59, 0x57, 0xef, 0xee, 0xa5, 0x62
+    ];
+    private static readonly byte[] RgbMagicConstantZero = [0x7e, 0xe9, 0xed, 0x4a, 0xf7, 0x73, 0x22, 0x4f, 0x00, 0xb8, 0xea, 0x7e, 0xfb, 0x02, 0x7c, 0xbb];
+
     private readonly ECPoint _wmrmEcc256PubKey;
-
     private readonly Dictionary<int, Session> _sessions = [];
     
-    private CertificateChain _certificateChain;
-    private EccKey _encryptionKey;
-    private EccKey _signingKey;
+    private readonly CertificateChain _certificateChain;
+    private readonly EccKey _encryptionKey;
+    private readonly EccKey _signingKey;
 
     public Cdm(CertificateChain certificateChain, EccKey encryptionKey, EccKey signingKey)
     {
@@ -72,7 +75,9 @@ public class Cdm
     private byte[] GetCipherData(Session session)
     {
         var b64Chain = Convert.ToBase64String(_certificateChain.Dumps());
-        var body = $"<Data><CertificateChains><CertificateChain>{b64Chain}</CertificateChain></CertificateChains></Data>";
+        var body = 
+            $"<Data><CertificateChains><CertificateChain>{b64Chain}</CertificateChain></CertificateChains>" +
+            $"<Features><Feature Name=\"AESCBC\">\"\"</Feature><REE><AESCBCS></AESCBCS></REE></Features></Data>";
 
         var ciphertext = Crypto.AesCbcEncrypt(session.XmlKey.AesKey, session.XmlKey.AesIv, Encoding.UTF8.GetBytes(body));
         return session.XmlKey.AesIv.Concat(ciphertext).ToArray();
@@ -175,7 +180,7 @@ public class Cdm
             "</soap:Envelope>";
     }
 
-    private bool VerifyEncryptionKey(Session session, XmrLicense license)
+    private static bool VerifyEncryptionKey(Session session, XmrLicense license)
     {
         var eccKeys = license.GetObject(42);
         if (eccKeys == null)
@@ -207,6 +212,8 @@ public class Cdm
             var contentKeys = license.GetObject(10);
             if (contentKeys == null)
                 throw new InvalidLicense("License does not contain any content keys");
+
+            var isScalable = license.GetObject(81).Any();
             
             foreach (var contentKey in contentKeys)
             {
@@ -215,25 +222,45 @@ public class Cdm
                 var cipherType = (Key.CipherTypes)contentKey["cipher_type"];
                 var encryptedKey = (byte[])contentKey["encrypted_key"];
                 
-                byte[] key;
-                byte[] integrityKey;
-                
-                switch (cipherType)
-                {
-                    case Key.CipherTypes.Ecc256:
-                        (ECPoint point1, ECPoint point2) = (Utils.FromBytes(encryptedKey[..64]), Utils.FromBytes(encryptedKey[64..]));
-                        var decrypted = Crypto.Ecc256Decrypt(point1, point2, session.EncryptionKey.PrivateKey).ToBytes();
-                        integrityKey = decrypted[..16];
-                        key = decrypted[16..32];
-                        break;
-                    default:
-                        throw new InvalidLicense($"Cipher type {cipherType} is not supported");
-                }
+                if (!new[] {Key.CipherTypes.Ecc256, Key.CipherTypes.Ecc256WithKz, Key.CipherTypes.Ecc256ViaSymmetric}.Contains(cipherType))
+                    throw new InvalidLicense($"Invalid cipher type {cipherType}");
 
-                if (!license.CheckSignature(integrityKey))
+                var viaSymmetric = cipherType == Key.CipherTypes.Ecc256ViaSymmetric;
+
+                (ECPoint point1, ECPoint point2) = (Utils.FromBytes(encryptedKey[..64]), Utils.FromBytes(encryptedKey[64..128]));
+                var decrypted = Crypto.Ecc256Decrypt(point1, point2, session.EncryptionKey.PrivateKey).ToBytes();
+                var (ci, ck) = (decrypted[..16], decrypted[16..32]);
+
+                if (isScalable)
+                {
+                    ci = decrypted.Where((x, i) => i % 2 == 0).Take(16).ToArray();
+                    ck = decrypted.Where((x, i) => i % 2 == 1).Take(16).ToArray();
+
+                    if (viaSymmetric)
+                    {
+                        var embeddedRootLicense = encryptedKey[..144];
+                        var embeddedLeafLicense = encryptedKey[144..];
+
+                        var rgbKey = Enumerable.Range(0, 16).Select(i => (byte)(ck[i] ^ RgbMagicConstantZero[i])).ToArray();
+                        var contentKeyPrime = Crypto.AesEcbEncrypt(ck, rgbKey);
+
+                        var auxiliaryKeys = (List<object>)license.GetObject(81).First()["auxiliary_keys"];
+                        var auxKey = (byte[])((Dictionary<string, object>)auxiliaryKeys.First())["key"];
+
+                        var uplinkXKey = Crypto.AesEcbEncrypt(contentKeyPrime, auxKey);
+                        var secondaryKey = Crypto.AesEcbEncrypt(ck, embeddedRootLicense[128..]);
+
+                        embeddedLeafLicense = Crypto.AesEcbEncrypt(uplinkXKey, embeddedLeafLicense);
+                        embeddedLeafLicense = Crypto.AesEcbEncrypt(secondaryKey, embeddedLeafLicense);
+
+                        (ci, ck) = (embeddedLeafLicense[..16], embeddedLeafLicense[16..]);
+                    }
+                }
+                
+                if (!license.CheckSignature(ci))
                     throw new InvalidLicense("License integrity signature does not match");
                 
-                session.Keys.Add(new Key(keyId, keyType, cipherType, key));
+                session.Keys.Add(new Key(keyId, keyType, cipherType, ck));
             }
         }
     }
