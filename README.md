@@ -33,7 +33,39 @@ csplayready export-device DEVICE.prd
 An example code snippet:
 
 ```csharp
-...
+var device = Device.Load("C:/Path/To/A/Device.prd");
+var cdm = Cdm.FromDevice(device);
+var sessionId = cdm.Open();
+
+var pssh = new Pssh(
+    "AAADfHBzc2gAAAAAmgTweZhAQoarkuZb4IhflQAAA1xcAwAAAQABAFIDPABXAFIATQBIAEUAQQBEAEUAUgAgAHgAbQBsAG4A" +
+    "cwA9ACIAaAB0AHQAcAA6AC8ALwBzAGMAaABlAG0AYQBzAC4AbQBpAGMAcgBvAHMAbwBmAHQALgBjAG8AbQAvAEQAUgBNAC8AMgAwADAA" +
+    "NwAvADAAMwAvAFAAbABhAHkAUgBlAGEAZAB5AEgAZQBhAGQAZQByACIAIAB2AGUAcgBzAGkAbwBuAD0AIgA0AC4AMAAuADAALgAwACIA" +
+    "PgA8AEQAQQBUAEEAPgA8AFAAUgBPAFQARQBDAFQASQBOAEYATwA+ADwASwBFAFkATABFAE4APgAxADYAPAAvAEsARQBZAEwARQBOAD4A" +
+    "PABBAEwARwBJAEQAPgBBAEUAUwBDAFQAUgA8AC8AQQBMAEcASQBEAD4APAAvAFAAUgBPAFQARQBDAFQASQBOAEYATwA+ADwASwBJAEQA" +
+    "PgA0AFIAcABsAGIAKwBUAGIATgBFAFMAOAB0AEcAawBOAEYAVwBUAEUASABBAD0APQA8AC8ASwBJAEQAPgA8AEMASABFAEMASwBTAFUA" +
+    "TQA+AEsATABqADMAUQB6AFEAUAAvAE4AQQA9ADwALwBDAEgARQBDAEsAUwBVAE0APgA8AEwAQQBfAFUAUgBMAD4AaAB0AHQAcABzADoA" +
+    "LwAvAHAAcgBvAGYAZgBpAGMAaQBhAGwAcwBpAHQAZQAuAGsAZQB5AGQAZQBsAGkAdgBlAHIAeQAuAG0AZQBkAGkAYQBzAGUAcgB2AGkA" +
+    "YwBlAHMALgB3AGkAbgBkAG8AdwBzAC4AbgBlAHQALwBQAGwAYQB5AFIAZQBhAGQAeQAvADwALwBMAEEAXwBVAFIATAA+ADwAQwBVAFMA" +
+    "VABPAE0AQQBUAFQAUgBJAEIAVQBUAEUAUwA+ADwASQBJAFMAXwBEAFIATQBfAFYARQBSAFMASQBPAE4APgA4AC4AMQAuADIAMwAwADQA" +
+    "LgAzADEAPAAvAEkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVABUAFIASQBCAFUAVABFAFMA" +
+    "PgA8AC8ARABBAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==");
+
+var wrmHeaders = pssh.GetWrmHeaders();
+var challenge = cdm.GetLicenseChallenge(sessionId, wrmHeaders.First());
+
+using HttpClient client = new HttpClient();
+var content = new StringContent(challenge, Encoding.UTF8, "text/xml");
+
+const string server = "https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:2000)";
+HttpResponseMessage response = client.PostAsync(server, content).Result;
+
+var responseBody = response.Content.ReadAsStringAsync().Result;
+
+cdm.ParseLicense(sessionId, responseBody);
+
+foreach (var key in cdm.GetKeys(sessionId))
+    Console.WriteLine($"{key.KeyId.ToHex()}:{key.RawKey.ToHex()}");
 ```
 
 ## Disclaimer
