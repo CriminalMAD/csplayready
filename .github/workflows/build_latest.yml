@@ -27,7 +27,7 @@ jobs:
         run: Compress-Archive -Path "csplayready/bin/Release/net9.0/win-${{ matrix.arch }}/publish/*" -DestinationPath "csplayready-win-${{ matrix.arch }}.zip"
         
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: csplayready-win-${{ matrix.arch }}
           path: csplayready-win-${{ matrix.arch }}.zip
@@ -52,7 +52,7 @@ jobs:
         run: tar -czf csplayready-linux-${{ matrix.arch }}.tar.gz -C csplayready/bin/Release/net9.0/linux-${{ matrix.arch }}/publish/ .
         
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: csplayready-linux-${{ matrix.arch }}
           path: csplayready-linux-${{ matrix.arch }}.tar.gz
@@ -80,13 +80,13 @@ jobs:
         run: tar -czf csplayready-mac-arm64.tar.gz -C csplayready/bin/Release/net9.0/osx-arm64/publish/ .
         
       - name: Upload Artifact (x64)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: csplayready-mac-x64
           path: csplayready-mac-x64.tar.gz
           
       - name: Upload Artifact (arm64)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: csplayready-mac-arm64
           path: csplayready-mac-arm64.tar.gz
@@ -98,7 +98,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         
       - name: Create Release and Upload Assets
         env:
