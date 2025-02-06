@@ -7,13 +7,14 @@
         <Nullable>enable</Nullable>
         <PublishAot>true</PublishAot>
         <InvariantGlobalization>true</InvariantGlobalization>
-        <Version>0.5.2</Version>
+        <Version>0.5.5</Version>
         <PackageId>csplayready</PackageId>
         <Authors>DevLARLEY</Authors>
         <Description>C# implementation of Microsoft's Playready DRM CDM (Content Decryption Module)</Description>
         <RepositoryUrl>https://github.com/ready-dl/csplayready</RepositoryUrl>
         <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     </PropertyGroup>
 
     <ItemGroup>
@@ -24,6 +25,9 @@
       <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
       <None Include="..\README.md" Pack="true" PackagePath="\" />
       <None Include="..\LICENSE.txt" Pack="true" PackagePath=""/>
+      <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="16.3.0" />
+      <PackageReference Include="Watson" Version="6.3.5" />
+      <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
 </Project>

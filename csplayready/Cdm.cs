@@ -25,7 +25,7 @@ public class Cdm
     private static readonly byte[] RgbMagicConstantZero = [0x7e, 0xe9, 0xed, 0x4a, 0xf7, 0x73, 0x22, 0x4f, 0x00, 0xb8, 0xea, 0x7e, 0xfb, 0x02, 0x7c, 0xbb];
 
     private readonly ECPoint _wmrmEcc256PubKey;
-    private readonly Dictionary<int, Session> _sessions = [];
+    private readonly Dictionary<string, Session> _sessions = [];
     
     private readonly CertificateChain _certificateChain;
     private readonly EccKey _encryptionKey;
@@ -49,21 +49,23 @@ public class Cdm
         return new Cdm(device.GroupCertificate!, device.EncryptionKey!, device.SigningKey!);
     }
 
-    public int Open()
+    public uint? GetSecurityLevel() => _certificateChain.GetSecurityLevel();
+    
+    public byte[] Open()
     {
         if (_sessions.Count > MaxNumOfSessions)
             throw new TooManySessions($"Too many Sessions open ({MaxNumOfSessions}).");
 
-        var session = new Session(_sessions.Count + 1);
-        _sessions[session.Id] = session;
+        var session = new Session();
+        _sessions[session.Id.ToHex()] = session;
 
         return session.Id;
     }
 
-    public void Close(int sessionId)
+    public void Close(byte[] sessionId)
     {
-        if (!_sessions.Remove(sessionId))
-            throw new InvalidSession($"Session identifier {sessionId} is invalid.");
+        if (!_sessions.Remove(sessionId.ToHex()))
+            throw new InvalidSession($"Session identifier {sessionId.ToHex()} is invalid.");
     }
 
     private byte[] GetKeyData(Session session)
@@ -130,22 +132,19 @@ public class Cdm
             "</SignedInfo>";
     }
 
-    public string GetLicenseChallenge(int sessionId, string wrmHeader)
+    public string GetLicenseChallenge(byte[] sessionId, string wrmHeader)
     {
-        if (!_sessions.TryGetValue(sessionId, out Session? session))
-            throw new InvalidSession($"Session identifier {sessionId} is invalid.");
+        if (!_sessions.TryGetValue(sessionId.ToHex(), out Session? session))
+            throw new InvalidSession($"Session identifier {sessionId.ToHex()} is invalid.");
 
         session.SigningKey = _signingKey;
         session.EncryptionKey = _encryptionKey;
         
         SecureRandom secureRandom = new SecureRandom();
-        
-        var randomBytes = new byte[16];
-        secureRandom.NextBytes(randomBytes);
-        
+     
         var laContent = GetDigestContent(
             wrmHeader, 
-            Convert.ToBase64String(randomBytes), 
+            Convert.ToBase64String(Crypto.GetRandomBytes(16)), 
             Convert.ToBase64String(GetKeyData(session)),
             Convert.ToBase64String(GetCipherData(session))
         );
@@ -190,10 +189,10 @@ public class Cdm
         return encryptionKey.SequenceEqual(session.EncryptionKey!.PublicBytes());
     }
 
-    public void ParseLicense(int sessionId, string xmrLicense)
+    public void ParseLicense(byte[] sessionId, string xmrLicense)
     {
-        if (!_sessions.TryGetValue(sessionId, out Session? session))
-            throw new InvalidSession($"Session identifier {sessionId} is invalid");
+        if (!_sessions.TryGetValue(sessionId.ToHex(), out Session? session))
+            throw new InvalidSession($"Session identifier {sessionId.ToHex()} is invalid");
 
         if (session.EncryptionKey == null || session.SigningKey == null)
             throw new InvalidSession("Cannot parse a license message without first making a license request");
@@ -265,10 +264,10 @@ public class Cdm
         }
     }
 
-    public List<Key> GetKeys(int sessionId)
+    public List<Key> GetKeys(byte[] sessionId)
     {
-        if (!_sessions.TryGetValue(sessionId, out Session? session))
-            throw new InvalidSession($"Session identifier {sessionId} is invalid");
+        if (!_sessions.TryGetValue(sessionId.ToHex(), out Session? session))
+            throw new InvalidSession($"Session identifier {sessionId.ToHex()} is invalid");
 
         return session.Keys;
     }

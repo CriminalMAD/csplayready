@@ -45,8 +45,8 @@ public static class Crypto
         signer.Init(true, privateKeyParams);
 
         var signature = signer.GenerateSignature(hash);
-        return signature[0].ToRawByteArray()
-            .Concat(signature[1].ToRawByteArray())
+        return signature[0].ToFixedByteArray()
+            .Concat(signature[1].ToFixedByteArray())
             .ToArray();
     }
     
@@ -62,5 +62,13 @@ public static class Crypto
         var s = new BigInteger(1, signature[32..]);
         
         return signer.VerifySignature(hash, r, s);
+    }
+    
+    public static byte[] GetRandomBytes(int amount)
+    {
+        var secureRandom = new SecureRandom();
+        var randomBytes = new byte[amount];
+        secureRandom.NextBytes(randomBytes);
+        return randomBytes;
     }
 }

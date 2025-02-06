@@ -79,14 +79,14 @@ public class EccKey
 
     public void Dump(string path, bool privateOnly = false) => File.WriteAllBytes(path, Dumps(privateOnly));
 
-    public byte[] PrivateBytes() => PrivateKey.ToRawByteArray();
+    public byte[] PrivateBytes() => PrivateKey.ToFixedByteArray();
     
     public byte[] PrivateSha256Digest() => SHA256.HashData(PrivateBytes());
     
     public byte[] PublicBytes()
     {
-        return PublicKey.XCoord.ToBigInteger().ToRawByteArray()
-            .Concat(PublicKey.YCoord.ToBigInteger().ToRawByteArray())
+        return PublicKey.XCoord.ToBigInteger().ToFixedByteArray()
+            .Concat(PublicKey.YCoord.ToBigInteger().ToFixedByteArray())
             .ToArray();
     }
     

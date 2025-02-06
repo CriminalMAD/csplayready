@@ -6,14 +6,17 @@ using csplayready.license;
 using System.CommandLine;
 using System.Net;
 using System.Text;
+using csplayready.remote;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Security;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace csplayready;
 
 class Program
 {
-    private const string Version = "0.5.2";
+    public const string Version = "0.5.5";
 
     private static List<Key>? License(ILogger logger, Device device, Pssh pssh, string server)
     {
@@ -22,14 +25,13 @@ class Program
         
         var sessionId = cdm.Open();
 
-        var wrmHeaders = pssh.GetWrmHeaders();
-        if (wrmHeaders.Length == 0)
+        if (pssh.WrmHeaders.Length == 0)
         {
             logger.LogError("PSSH does not contain any WRM headers");
             return null;
         }
         
-        var challenge = cdm.GetLicenseChallenge(sessionId, wrmHeaders.First());
+        var challenge = cdm.GetLicenseChallenge(sessionId, pssh.WrmHeaders.First());
         logger.LogInformation("Created license challenge");
 
         using HttpClient client = new HttpClient();
@@ -62,7 +64,7 @@ class Program
                     options.TimestampFormat = "HH:mm:ss ";
                 }));
         ILogger logger = factory.CreateLogger("csplayready");
-        
+
         // license
 
         var license = new Command("license", "Make a License Request to a server using a given PSSH");
@@ -75,39 +77,34 @@ class Program
         license.AddArgument(psshArg);
         license.AddArgument(serverArg);
         
-        license.SetHandler(context =>
+        license.SetHandler((deviceName, pssh, server) =>
         {
-            var device = Device.Load(context.ParseResult.GetValueForArgument(deviceNameArg).FullName);
-            var pssh = new Pssh(context.ParseResult.GetValueForArgument(psshArg));
-            var server = context.ParseResult.GetValueForArgument(serverArg);
+            var device = Device.Load(deviceName.FullName);
 
-            var keys = License(logger, device, pssh, server);
-            if (keys == null)
-                return;
+            var keys = License(logger, device, new Pssh(pssh), server);
+            if (keys == null) return;
             
             foreach (var key in keys)
             {
                 logger.LogInformation("{keyId}:{key}", key.KeyId.ToHex(), key.RawKey.ToHex());
             }
-        });
+        }, deviceNameArg, psshArg, serverArg);
         
         // test
       
         var test = new Command("test", "Test the CDM code by getting Content Keys for the Tears Of Steel demo on the Playready Test Server");
         
         var deviceNameArg2 = new Argument<FileInfo>(name: "prdFile", description: "Device path") { Arity = ArgumentArity.ExactlyOne };
-        var encryptionType = new Option<string>(["-c", "--ckt"], description: "Content key encryption type", getDefaultValue: () => "aesctr");
-        encryptionType.FromAmong("aesctr", "aescbc");
-        var securityLevel = new Option<string>(["-sl", "--security_level"], description: "Minimum security level", getDefaultValue: () => "2000" );
-        securityLevel.FromAmong("150", "2000", "3000");
+        var encryptionTypeOption = new Option<string>(["-c", "--ckt"], description: "Content key encryption type", getDefaultValue: () => "aesctr").FromAmong("aesctr", "aescbc");
+        var securityLevelOption = new Option<string>(["-sl", "--security_level"], description: "Minimum security level", getDefaultValue: () => "2000" ).FromAmong("150", "2000", "3000");
         
         test.AddArgument(deviceNameArg2);
-        test.AddOption(encryptionType);
-        test.AddOption(securityLevel);
+        test.AddOption(encryptionTypeOption);
+        test.AddOption(securityLevelOption);
         
-        test.SetHandler(context =>
+        test.SetHandler((deviceName, encryptionType, securityLevel) =>
         {
-            var device = Device.Load(context.ParseResult.GetValueForArgument(deviceNameArg2).FullName);
+            var device = Device.Load(deviceName.FullName);
             var pssh = new Pssh(
                 "AAADfHBzc2gAAAAAmgTweZhAQoarkuZb4IhflQAAA1xcAwAAAQABAFIDPABXAFIATQBIAEUAQQBEAEUAUgAgAHgAbQBsAG" +
                 "4AcwA9ACIAaAB0AHQAcAA6AC8ALwBzAGMAaABlAG0AYQBzAC4AbQBpAGMAcgBvAHMAbwBmAHQALgBjAG8AbQAvAEQAUgBNAC8AMgAw" +
@@ -122,29 +119,26 @@ class Program
                 "AC4AMQAuADIAMwAwADQALgAzADEAPAAvAEkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVA" +
                 "BUAFIASQBCAFUAVABFAFMAPgA8AC8ARABBAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==");
 
-            var encryptionTypeArg = context.ParseResult.GetValueForOption(encryptionType);
-            var securityLevelArg = context.ParseResult.GetValueForOption(securityLevel);
-            var server = $"https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:{securityLevelArg},ckt:{encryptionTypeArg})";
+            var server = $"https://test.playready.microsoft.com/service/rightsmanager.asmx?cfg=(persist:false,sl:{securityLevel},ckt:{encryptionType})";
             
             var keys = License(logger, device, pssh, server);
-            if (keys == null)
-                return;
+            if (keys == null) return;
             
             foreach (var key in keys)
             {
                 logger.LogInformation("{keyId}:{key}", key.KeyId.ToHex(), key.RawKey.ToHex());
             }
-        });
+        }, deviceNameArg2, encryptionTypeOption, securityLevelOption);
         
         // create-device
         
         var createDevice = new Command("create-device", "Create a Playready Device (.prd) file from an ECC private group key (optionally encryption/signing key) and group certificate chain");
         
         var groupKeyOption = new Option<FileInfo>(["-k", "--group_key"], "Device ECC private group key") { IsRequired = true };
-        var encryptionKeyOption = new Option<FileInfo>(["-e", "--encryption_key"], "Optional Device ECC private encryption key");
-        var signingKeyOption = new Option<FileInfo>(["-s", "--signing_key"], "Optional Device ECC private signing key");
+        var encryptionKeyOption = new Option<FileInfo?>(["-e", "--encryption_key"], "Optional Device ECC private encryption key");
+        var signingKeyOption = new Option<FileInfo?>(["-s", "--signing_key"], "Optional Device ECC private signing key");
         var groupCertOption = new Option<FileInfo>(["-c", "--group_certificate"], "Device group certificate chain") { IsRequired = true };
-        var outputOption = new Option<FileInfo>(["-o", "--output"], "Output file name");
+        var outputOption = new Option<FileInfo?>(["-o", "--output"], "Output file name");
 
         createDevice.AddOption(groupKeyOption);
         createDevice.AddOption(encryptionKeyOption);
@@ -152,17 +146,13 @@ class Program
         createDevice.AddOption(groupCertOption);
         createDevice.AddOption(outputOption);
 
-        createDevice.SetHandler(context =>
+        createDevice.SetHandler((groupKeyName, encryptionKeyName, signingKeyName, groupCertName, output) =>
         {
-            var groupKey = EccKey.Load(context.ParseResult.GetValueForOption(groupKeyOption)!.FullName);
+            var groupKey = EccKey.Load(groupKeyName.FullName);
+            var certificateChain = CertificateChain.Load(groupCertName.FullName);
             
-            var encryptionKeyArg = context.ParseResult.GetValueForOption(encryptionKeyOption);
-            var encryptionKey = encryptionKeyArg == null ? EccKey.Generate() : EccKey.Load(encryptionKeyArg.FullName);
-            
-            var signingKeyArg = context.ParseResult.GetValueForOption(signingKeyOption);
-            var signingKey = signingKeyArg == null ? EccKey.Generate() : EccKey.Load(signingKeyArg.FullName);
-            
-            var certificateChain = CertificateChain.Load(context.ParseResult.GetValueForOption(groupCertOption)!.FullName);
+            var encryptionKey = encryptionKeyName == null ? EccKey.Generate() : EccKey.Load(encryptionKeyName.FullName);
+            var signingKey = signingKeyName == null ? EccKey.Generate() : EccKey.Load(signingKeyName.FullName);
 
             if (!certificateChain.Get(0).GetIssuerKey()!.SequenceEqual(groupKey.PublicBytes()))
             {
@@ -170,9 +160,8 @@ class Program
                 return;
             }
             
-            var random = new SecureRandom();
-            var certId = random.GenerateSeed(16);
-            var clientId = random.GenerateSeed(16);
+            var certId = Crypto.GetRandomBytes(16);
+            var clientId = Crypto.GetRandomBytes(16);
 
             var leafCert = Certificate.NewLeafCertificate(certId, (uint)certificateChain.GetSecurityLevel()!, clientId, signingKey, encryptionKey, groupKey, certificateChain);
             certificateChain.Prepend(leafCert);
@@ -181,37 +170,32 @@ class Program
 
             var device = new Device(groupKey, encryptionKey, signingKey, certificateChain);
             
-            var outputArg = context.ParseResult.GetValueForOption(outputOption);
-            var saveName = outputArg == null ? $"{device.GetName()}.prd" : outputArg.FullName;
+            var saveName = output == null ? $"{device.GetName()}.prd" : output.FullName;
             logger.LogInformation("Saving to: {name}", saveName);
             
             device.Dump(saveName);
-        });
+        }, groupKeyOption, encryptionKeyOption, signingKeyOption, groupCertOption, outputOption);
         
         // reprovision-device
         
         var reprovisionDevice = new Command("reprovision-device", "Reprovision a Playready Device (.prd) by creating a new leaf certificate and new encryption/signing keys");
         
         var deviceNameArg3 = new Argument<FileInfo>(name: "prdFile", description: "Device to reprovision") { Arity = ArgumentArity.ExactlyOne };
-        var encryptionKeyOption2 = new Option<FileInfo>(["-e", "--encryption_key"], "Optional Device ECC private encryption key");
-        var signingKeyOption2 = new Option<FileInfo>(["-s", "--signing_key"], "Optional Device ECC private signing key");
-        var outputOption2 = new Option<string>(["-o", "--output"], "Output file name");
+        var encryptionKeyOption2 = new Option<FileInfo?>(["-e", "--encryption_key"], "Optional Device ECC private encryption key");
+        var signingKeyOption2 = new Option<FileInfo?>(["-s", "--signing_key"], "Optional Device ECC private signing key");
+        var outputOption2 = new Option<string?>(["-o", "--output"], "Output file name");
         
         reprovisionDevice.AddArgument(deviceNameArg3);
         reprovisionDevice.AddOption(encryptionKeyOption2);
         reprovisionDevice.AddOption(signingKeyOption2);
         reprovisionDevice.AddOption(outputOption2);
         
-        reprovisionDevice.SetHandler(context =>
+        reprovisionDevice.SetHandler((deviceName, encryptionKeyName, signingKeyName, output) =>
         {
-            var deviceName = context.ParseResult.GetValueForArgument(deviceNameArg3);
             var device = Device.Load(deviceName.FullName);
             
-            var encryptionKeyArg = context.ParseResult.GetValueForOption(encryptionKeyOption2);
-            var encryptionKey = encryptionKeyArg == null ? EccKey.Generate() : EccKey.Load(encryptionKeyArg.FullName);
-            
-            var signingKeyArg = context.ParseResult.GetValueForOption(signingKeyOption2);
-            var signingKey = signingKeyArg == null ? EccKey.Generate() : EccKey.Load(signingKeyArg.FullName);
+            var encryptionKey = encryptionKeyName == null ? EccKey.Generate() : EccKey.Load(encryptionKeyName.FullName);
+            var signingKey = signingKeyName == null ? EccKey.Generate() : EccKey.Load(signingKeyName.FullName);
             
             if (device.GroupKey == null)
             {
@@ -222,9 +206,8 @@ class Program
             device.EncryptionKey = encryptionKey;
             device.SigningKey = signingKey;
             
-            var random = new SecureRandom();
-            var certId = random.GenerateSeed(16);
-            var clientId = random.GenerateSeed(16);
+            var certId = Crypto.GetRandomBytes(16);
+            var clientId = Crypto.GetRandomBytes(16);
 
             device.GroupCertificate!.Remove(0);
             
@@ -233,31 +216,27 @@ class Program
             
             logger.LogInformation("Certificate validity: {validity}", device.GroupCertificate.Verify());
        
-            var outputArg = context.ParseResult.GetValueForOption(outputOption2);
-            var saveName = outputArg ?? $"{device.GetName()}.prd";
+            var saveName = output ?? $"{device.GetName()}.prd";
             logger.LogInformation("Saving to: {name}", saveName);
             
             device.Dump(saveName);
-        });
+        }, deviceNameArg3, encryptionKeyOption2, signingKeyOption2, outputOption2);
         
         // export-device
         
         var exportDevice = new Command("export-device", "Export a Playready Device (.prd) file to a group key and group certificate");
         
         var deviceNameArg4 = new Argument<FileInfo>(name: "prdFile", description: "Device to dump") { Arity = ArgumentArity.ExactlyOne };
-        var outputDirOption2 = new Option<string>(["-o", "--output"], "Output directory");
+        var outputDirOption2 = new Option<string?>(["-o", "--output"], "Output directory");
         
         exportDevice.AddArgument(deviceNameArg4);
         exportDevice.AddOption(outputDirOption2);
         
-        exportDevice.SetHandler(context =>
+        exportDevice.SetHandler((deviceName, output) =>
         {
-            var deviceName = context.ParseResult.GetValueForArgument(deviceNameArg4);
             var device = Device.Load(deviceName.FullName);
             
-            var outputDirArg = context.ParseResult.GetValueForOption(outputDirOption2);
-
-            var outDir = outputDirArg ?? Path.GetFileNameWithoutExtension(deviceName.Name);
+            var outDir = output ?? Path.GetFileNameWithoutExtension(deviceName.Name);
             if (Directory.Exists(outDir))
             {
                 if (Directory.EnumerateFileSystemEntries(outDir).Any())
@@ -282,7 +261,32 @@ class Program
             device.GroupCertificate.Remove(0);
             device.GroupCertificate.Dump(Path.Combine(outDir, "bgroupcert.dat"));
             logger.LogInformation("Exported group certificate to bgroupcert.dat");
-        });
+        }, deviceNameArg4, outputDirOption2);
+        
+        // serve
+        
+        var serve = new Command("serve", "Serve your local CDM and Playready Devices remotely");
+
+        var configPathArg = new Argument<FileInfo>(name: "configPath", description: "Serve config file path") { Arity = ArgumentArity.ExactlyOne };
+        var hostOption = new Option<string>(["-h", "--host"], description: "Host to serve from", getDefaultValue: () => "127.0.0.1");
+        var portOption = new Option<string>(["-p", "--port"], description: "Port to serve from", getDefaultValue: () => "6798");
+        
+        serve.AddArgument(configPathArg);
+        serve.AddOption(hostOption);
+        serve.AddOption(portOption);
+        
+        serve.SetHandler((configPath, host, port) =>
+        {
+            IDeserializer deserializer = new StaticDeserializerBuilder(new YamlContext())
+                .WithNamingConvention(UnderscoredNamingConvention.Instance)
+                .Build();
+            
+            var yamlContent = File.ReadAllText(configPath.FullName);
+            var configData = deserializer.Deserialize<YamlConfig.ConfigData>(yamlContent);
+ 
+            var server = new Serve(host, Convert.ToInt32(port), configData);
+            server.Run();
+        }, configPathArg, hostOption, portOption);
         
         var rootCommand = new RootCommand($"csplayready (https://github.com/ready-dl/csplayready) version {Version} Copyright (c) 2025-{DateTime.Now.Year} DevLARLEY");
         
@@ -291,7 +295,12 @@ class Program
         rootCommand.AddCommand(license);
         rootCommand.AddCommand(reprovisionDevice);
         rootCommand.AddCommand(test);
+        rootCommand.AddCommand(serve);
         
         rootCommand.InvokeAsync(args).Wait();
+        
+        // TODO:
+        //   + add Enums
+        //   + cli function for testing remote cdm?
     }
 }

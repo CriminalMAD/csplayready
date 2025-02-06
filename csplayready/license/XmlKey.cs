@@ -21,7 +21,7 @@ public class XmlKey
         _sharedX = sharedPoint.PublicKey.XCoord.ToBigInteger();
         _sharedY = sharedPoint.PublicKey.YCoord.ToBigInteger();
 
-        var sharedXBytes = _sharedX.ToRawByteArray();
+        var sharedXBytes = _sharedX.ToFixedByteArray();
         AesIv = sharedXBytes[..16];
         AesKey = sharedXBytes[16..];
     }

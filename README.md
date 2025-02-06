@@ -51,8 +51,7 @@ var pssh = new Pssh(
     "LgAzADEAPAAvAEkASQBTAF8ARABSAE0AXwBWAEUAUgBTAEkATwBOAD4APAAvAEMAVQBTAFQATwBNAEEAVABUAFIASQBCAFUAVABFAFMA" +
     "PgA8AC8ARABBAFQAQQA+ADwALwBXAFIATQBIAEUAQQBEAEUAUgA+AA==");
 
-var wrmHeaders = pssh.GetWrmHeaders();
-var challenge = cdm.GetLicenseChallenge(sessionId, wrmHeaders.First());
+var challenge = cdm.GetLicenseChallenge(sessionId, pssh.WrmHeaders.First());
 
 using HttpClient client = new HttpClient();
 var content = new StringContent(challenge, Encoding.UTF8, "text/xml");
@@ -66,6 +65,8 @@ cdm.ParseLicense(sessionId, responseBody);
 
 foreach (var key in cdm.GetKeys(sessionId))
     Console.WriteLine($"{key.KeyId.ToHex()}:{key.RawKey.ToHex()}");
+
+cdm.Close(sessionId);
 ```
 
 ## Disclaimer
